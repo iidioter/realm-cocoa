@@ -604,7 +604,6 @@ struct ObserverState {
 
     bool changed = false;
     std::vector<std::pair<NSKeyValueChange, NSMutableIndexSet *>> linkview_changes;
-    ObserverState *next = nullptr;
 };
 
 class ModifiedRowParser {
@@ -690,15 +689,15 @@ public:
         active_linklist = nullptr;
         for (auto& o : observers) {
             if (o.table == current_table && o.row == row && o.column == col) {
-                o.next = active_linklist;
                 active_linklist = &o;
+                break;
             }
         }
         return true;
     }
 
     void append_link_list_change(NSKeyValueChange kind, NSUInteger index) {
-        for (ObserverState *o = active_linklist; o; o = o->next) {
+        if (ObserverState *o = active_linklist) {
             if (o->linkview_changes.empty() || o->linkview_changes.back().first != kind) {
                 o->linkview_changes.push_back(std::make_pair(kind, [NSMutableIndexSet new]));
             }
@@ -723,7 +722,17 @@ public:
         return true;
     }
     bool link_list_clear() {
-        // needs to do stuff
+        if (ObserverState *o = active_linklist) {
+            auto range = NSMakeRange(0, o->observable->_row.get_linklist(o->column)->size());
+            if (o->linkview_changes.empty() || o->linkview_changes.back().first != NSKeyValueChangeRemoval) {
+                o->linkview_changes.push_back({NSKeyValueChangeRemoval,
+                    [NSMutableIndexSet indexSetWithIndexesInRange:range]});
+            }
+            else {
+                [o->linkview_changes.back().second addIndexesInRange:range];
+            }
+            o->changed = true;
+        }
         return true;
     }
 
